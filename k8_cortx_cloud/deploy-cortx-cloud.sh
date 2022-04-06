@@ -17,6 +17,12 @@ cortx_secret_fields=("kafka_admin_secret"
                      "csm_mgmt_admin_secret")
 readonly cortx_secret_fields
 
+### TODO CORTX-28968 Define or extract Headless Service names for components?
+cortxserver_service_headless_name="cortx-server"
+readonly cortxserver_service_headless_name
+
+global_cortx_secret_name=""
+
 function parseSolution()
 {
     ./parse_scripts/parse_yaml.sh "${solution_yaml}" "$1"
@@ -387,7 +393,7 @@ function deployRancherProvisioner()
         image=$(echo "${image}" | cut -f2 -d'>')
         ./parse_scripts/subst.sh "${rancher_prov_file}" "rancher.helperPod.image" "${image}"
 
-        kubectl create -f "${rancher_prov_file}"
+        kubectl apply -f "${rancher_prov_file}"
     fi
 }
 
@@ -425,11 +431,10 @@ function deployConsul()
     kubectl patch serviceaccount/consul-server -p '{"automountServiceAccountToken":false}'
 
 
-    ### CORTX-28968 TODO
+    ### TODO CORTX-28968 Remove this dev-phase shortcut
     # Rollout a new deployment version of Consul pods to use updated Service Account settings
     #kubectl rollout restart statefulset/consul-server
     #kubectl rollout restart daemonset/consul-client
-    ### CORTX-28968 END TODO
 
     ##TODO This needs to be maintained during upgrades etc...
 
@@ -654,7 +659,6 @@ function generateMachineIds()
         local auto_gen_path="${cfgmap_path}/auto-gen-${node}-${namespace}"
 
         id_paths+=("${auto_gen_path}/data")
-        # [[ ${deployment_type} != "data-only" ]] && id_paths+=("${auto_gen_path}/server")
         ((num_motr_client > 0)) && id_paths+=("${auto_gen_path}/client")
     done
 
@@ -728,24 +732,27 @@ function deployCortxConfigMap()
     storage_set_dur_sns=$(parseSolution 'solution.common.storage_sets.durability.sns' | cut -f2 -d'>' || true)
     storage_set_dur_dix=$(parseSolution 'solution.common.storage_sets.durability.dix' | cut -f2 -d'>' || true)
 
-    ### TODO CORTX-28968
+    ### TODO CORTX-28968 Document scope and context of server pod calculations
+    ### TODO CORTX-28968 Much of this overall function should evolve to live inside Helm charts
     local server_instances_per_node="$(getSolutionValue 'solution.common.s3.instances_per_node')"
     local count=0
     # StatefulSets create pod names of "{statefulset-name}-{index}", with index starting at 0
     local server_pod_prefix="cortx-server"
     local data_node_count=${#node_name_list[@]}
     local total_server_pods=$(( data_node_count * server_instances_per_node ))
+    ### TODO CORTX-28968 Create solution.yaml default values, as live kubectl lookup is sketchy (bitnami charts provide cluster.local as default)
+    local cluster_domain="cluster.local"
 
     for (( count=0; count<${total_server_pods}; count++ )); do
+        # Build out FQDN of server pods 
         local pod_name="${server_pod_prefix}-${count}"
-        ##TODO CORTX-28968 build out FQDN of server pods 
-        ## Evaluate if this should live inside Helm charts
-        ## ie {{- $serverName := printf "%s.%s.%s.svc.%s" $shortHost {{ $.Values.cortxRgw.headlessServiceName }} {{ $.Release.Namespace }} {{ $.clusterDomain }} -}}
+        local pod_fqdn="${pod_name}.${cortxserver_service_headless_name}.${namespace}.svc.${cluster_domain}"
         helm_install_args+=(
-            --set "clusterStorageSets.${storage_set_name}.nodes.${pod_name}.serverUuid=${pod_name}"
-            --set "cortxMotr.rgwEndpoints[${count}]=tcp://${pod_name}.cortx-server-headless.${namespace}.svc:21001"
-            ## TODO CORTX-28968 - Revist if this endpoint is needed for each Pod or if we can have just one for the Service
-            --set "cortxHare.haxServerEndpoints[${count}]=tcp://${pod_name}.cortx-server-headless.${namespace}.svc:22001"
+            ### TODO CORTX-28968 Does ${pod_name} below need to be ${pod_fqdn} for the Helm chart instead?
+            ### Reviewing internals of cortx-configmap Helm Chart would say "no".
+            --set "clusterStorageSets.${storage_set_name}.nodes.${pod_name}.serverUuid=${pod_fqdn}"
+            --set "cortxMotr.rgwEndpoints[${count}]=tcp://${pod_fqdn}:21001"
+            --set "cortxHare.haxServerEndpoints[${count}]=tcp://${pod_fqdn}:22001"
         )
     done
     ### END CORTX-28968
@@ -810,15 +817,6 @@ function deployCortxConfigMap()
             )
         done
     done
-
-    echo "${helm_install_args[@]}"
-
-    helm install \
-        "cortx-cfgmap-${namespace}" \
-        cortx-cloud-helm-pkg/cortx-configmap \
-        --set fullnameOverride="cortx-cfgmap-${namespace}" \
-        --dry-run -o yaml \
-        "${helm_install_args[@]}"
 
     helm install \
         "cortx-cfgmap-${namespace}" \
@@ -925,14 +923,14 @@ function deployCortxSecrets()
         printf "Installing CORTX with existing Secret %s.\n" "${cortx_secret_name}"
     fi
 
+    global_cortx_secret_name="${cortx_secret_name}"
+
     control_secret_path="./cortx-cloud-helm-pkg/cortx-control/secret-info.txt"
     data_secret_path="./cortx-cloud-helm-pkg/cortx-data/secret-info.txt"
-    server_secret_path="./cortx-cloud-helm-pkg/cortx-server/secret-info.txt"
     ha_secret_path="./cortx-cloud-helm-pkg/cortx-ha/secret-info.txt"
 
     printf "%s" "${cortx_secret_name}" > ${control_secret_path}
     printf "%s" "${cortx_secret_name}" > ${data_secret_path}
-    printf "%s" "${cortx_secret_name}" > ${server_secret_path}
     printf "%s" "${cortx_secret_name}" > ${ha_secret_path}
 
     if [[ ${num_motr_client} -gt 0 ]]; then
@@ -1085,15 +1083,16 @@ function deployCortxData()
     done
 
     # Wait for all cortx-data deployments to be ready
-    printf "\nWait for CORTX Data to be ready"
-    local deployments=()
-    for i in "${!node_selector_list[@]}"; do
-        deployments+=("deployment/cortx-data-${node_name_list[i]}")
-    done
-    if ! waitForAllDeploymentsAvailable 300s "CORTX Data" "${deployments[@]}"; then
-        echo "Failed.  Exiting script."
-        exit 1
-    fi
+    ### TODO CORTX-28968 Remove this dev-phase shortcut
+    #printf "\nWait for CORTX Data to be ready"
+    #local deployments=()
+    #for i in "${!node_selector_list[@]}"; do
+    #    deployments+=("deployment/cortx-data-${node_name_list[i]}")
+    #done
+    #if ! waitForAllDeploymentsAvailable 300s "CORTX Data" "${deployments[@]}"; then
+    #    echo "Failed.  Exiting script."
+    #    exit 1
+    #fi
 
     printf "\n\n"
 }
@@ -1119,9 +1118,16 @@ function deployCortxServer()
     s3_service_ports_https=$(getSolutionValue 'solution.common.external_services.s3.ports.https')
     hax_port="$(getSolutionValue 'solution.common.hax.port_num')"
 
+    ### TODO CORTX-28968 Document scope and context of server pod calculations
+    ### TODO CORTX-28968 Can this be a global?
+    local server_instances_per_node="$(getSolutionValue 'solution.common.s3.instances_per_node')"
+    local data_node_count=${#node_name_list[@]}
+    local total_server_pods=$(( data_node_count * server_instances_per_node ))
+
     helm install "cortx-server-${namespace}" cortx-cloud-helm-pkg/cortx-server \
         --set cortxserver.image="${cortxserver_image}" \
-        --set cortxserver.service.headless.name="cortx-server" \
+        --set cortxserver.replicas="${total_server_pods}" \
+        --set cortxserver.service.headless.name="${cortxserver_service_headless_name}" \
         --set cortxserver.service.loadbal.type="${s3_service_type}" \
         --set cortxserver.service.loadbal.ports.http="${s3_service_ports_http}" \
         --set cortxserver.service.loadbal.ports.https="${s3_service_ports_https}" \
@@ -1135,9 +1141,8 @@ function deployCortxServer()
         --set cortxserver.localpathpvc.mountpath="${local_storage}" \
         --set cortxserver.localpathpvc.requeststoragesize="1Gi" \
         --set cortxserver.hax.port="${hax_port}" \
-        --set cortxserver.secretinfo="secret-info.txt" \
+        --set cortxserver.secretname="${global_cortx_secret_name}" \
         --set cortxserver.serviceaccountname="${serviceAccountName}" \
-        --set namespace="${namespace}" \
         --namespace "${namespace}"
 
     printf "\nWait for CORTX Server to be ready"
