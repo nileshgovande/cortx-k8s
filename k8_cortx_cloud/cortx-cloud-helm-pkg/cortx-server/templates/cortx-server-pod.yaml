@@ -52,9 +52,6 @@ spec:
             name: {{ .Values.cortxserver.sslcfgmap.name }}
         - name: machine-id
           emptyDir: {}
-        #- name: local-path
-          #emptyDir: {}
-          ### TODO CORTX-28968 Evaluate volumeClaimTemplate versus emptyDir
         - name: {{ .Values.cortxserver.secretname }}
           secret:
             secretName: {{ .Values.cortxserver.secretname }}
@@ -70,7 +67,7 @@ spec:
           - sleep $(shuf -i 5-10 -n 1)s
           {{- else }}
           - export MACHINE_ID=$(hostname --fqdn);
-            export MACHINE_ID=$(hostname);  ##TEMP TEST
+            export MACHINE_ID=$(hostname);
             echo "Storing MACHINE_ID of '${MACHINE_ID}' in '${MACHINE_ID_PATH}'.";
             echo "${MACHINE_ID}" > ${MACHINE_ID_PATH};
             /opt/seagate/cortx/provisioner/bin/cortx_deploy -n ${MACHINE_ID} -f /etc/cortx/solution -c yaml:///etc/cortx/cluster.conf;
@@ -154,6 +151,7 @@ spec:
             allowPrivilegeEscalation: false
   volumeClaimTemplates:
   - metadata:
+      ### TODO CORTX-28968 Evaluate volumeClaimTemplate versus emptyDir
       name: local-path
     spec:
       accessModes: {{- toYaml .Values.cortxserver.localpathpvc.accessmodes | nindent 6 }}

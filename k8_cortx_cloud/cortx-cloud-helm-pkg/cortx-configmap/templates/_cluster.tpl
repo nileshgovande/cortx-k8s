@@ -77,7 +77,8 @@ cluster:
     {{- range $key, $val := $val.nodes }}
     {{- $shortHost := (split "." $key)._0 -}}
     {{- if and $.Values.cortxRgw.enabled $val.serverUuid }}
-    {{- include "storageset.node" (dict "name" $shortHost "id" $val.serverUuid "type" "server_node") | nindent 4 }}
+    {{- $serverName := printf "%s.cortx-server.default.svc.cluster.local" $val.serverUuid -}}
+    {{- include "storageset.node" (dict "name" $serverName "id" $val.serverUuid "type" "server_node") | nindent 4 }}
     {{- end }}
     {{- if $val.dataUuid }}
     {{- $dataName := printf "cortx-data-headless-svc-%s" $shortHost -}}
