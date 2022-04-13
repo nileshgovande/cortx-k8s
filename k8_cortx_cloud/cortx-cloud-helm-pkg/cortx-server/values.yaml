@@ -7,7 +7,7 @@ cortxserver:
   secretname: cortx-secret
   serviceaccountname: cortx-sa
   hax:
-    port: 22003
+    port: 22001
   service:
     clusterip:
       name: cortx-server-clusterip-svc

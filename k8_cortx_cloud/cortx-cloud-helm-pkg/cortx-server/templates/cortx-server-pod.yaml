@@ -41,7 +41,7 @@ spec:
         cortx.io/service-domain: "{{ .Values.cortxserver.service.headless.name }}.{{ .Release.Namespace }}.svc.{{ .Values.clusterdomain }}"
     spec:
       subdomain: {{ .Values.cortxserver.service.headless.name }}
-      setHostnameAsFQDN: true
+      #setHostnameAsFQDN: true
       serviceAccountName: {{ .Values.cortxserver.serviceaccountname }}
       volumes:
         - name: {{ .Values.cortxserver.cfgmap.volmountname }}
@@ -67,12 +67,12 @@ spec:
           - sleep $(shuf -i 5-10 -n 1)s
           {{- else }}
           - export MACHINE_ID=$(hostname --fqdn);
-            export MACHINE_ID=$(hostname);
-            export MACHINE_ID=$(hostname | md5sum | awk '{print $1}')
+            export HOSTNAME=$(hostname);
+            export MACHINE_ID=$(echo -n ${HOSTNAME} | md5sum | awk '{print $1}');
             echo "Storing MACHINE_ID of '${MACHINE_ID}' in '${MACHINE_ID_PATH}'.";
             echo "${MACHINE_ID}" > ${MACHINE_ID_PATH};
             /opt/seagate/cortx/provisioner/bin/cortx_deploy -n ${MACHINE_ID} -f /etc/cortx/solution -c yaml:///etc/cortx/cluster.conf;
-            sleep 180s;
+            sleep 10s;
           {{- end }}
           ### TODO CORTX-28968 Remove sleep from initContainer
         volumeMounts:
