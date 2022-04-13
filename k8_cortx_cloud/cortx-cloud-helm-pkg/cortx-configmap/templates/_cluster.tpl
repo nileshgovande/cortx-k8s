@@ -1,9 +1,7 @@
 {{- define "storageset.node" -}}
 - name: {{ .name }}
   {{- if eq .type "server_node" }}
-  {{- /* 
   ### TODO CORTX-28968 Revisit defaults here since we are moving away from UUID entirely...
-  */ }}
   id: {{ default uuidv4 .id | quote }}
   {{- else }}
   id: {{ default uuidv4 .id | replace "-" "" | quote }}
