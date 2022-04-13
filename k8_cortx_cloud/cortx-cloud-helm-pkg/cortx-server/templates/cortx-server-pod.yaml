@@ -70,6 +70,7 @@ spec:
           - sleep $(shuf -i 5-10 -n 1)s
           {{- else }}
           - export MACHINE_ID=$(hostname --fqdn);
+            export MACHINE_ID=$(hostname);  ##TEMP TEST
             echo "Storing MACHINE_ID of '${MACHINE_ID}' in '${MACHINE_ID_PATH}'.";
             echo "${MACHINE_ID}" > ${MACHINE_ID_PATH};
             /opt/seagate/cortx/provisioner/bin/cortx_deploy -n ${MACHINE_ID} -f /etc/cortx/solution -c yaml:///etc/cortx/cluster.conf;

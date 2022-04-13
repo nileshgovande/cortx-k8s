@@ -750,7 +750,8 @@ function deployCortxConfigMap()
         helm_install_args+=(
             ### TODO CORTX-28968 Does ${pod_name} below need to be ${pod_fqdn} for the Helm chart instead?
             ### Reviewing internals of cortx-configmap Helm Chart would say "no".
-            --set "clusterStorageSets.${storage_set_name}.nodes.${pod_name}.serverUuid=${pod_fqdn}"
+            ##--set "clusterStorageSets.${storage_set_name}.nodes.${pod_name}.serverUuid=${pod_fqdn}"
+            --set "clusterStorageSets.${storage_set_name}.nodes.${pod_name}.serverUuid=${pod_name}"
             --set "cortxMotr.rgwEndpoints[${count}]=tcp://${pod_fqdn}:21001"
             --set "cortxHare.haxServerEndpoints[${count}]=tcp://${pod_fqdn}:22001"
         )
