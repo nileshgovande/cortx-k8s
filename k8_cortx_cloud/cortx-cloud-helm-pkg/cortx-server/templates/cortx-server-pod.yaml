@@ -68,6 +68,7 @@ spec:
           {{- else }}
           - export MACHINE_ID=$(hostname --fqdn);
             export MACHINE_ID=$(hostname);
+            export MACHINE_ID=$(hostname | md5sum | awk '{print $1}')
             echo "Storing MACHINE_ID of '${MACHINE_ID}' in '${MACHINE_ID_PATH}'.";
             echo "${MACHINE_ID}" > ${MACHINE_ID_PATH};
             /opt/seagate/cortx/provisioner/bin/cortx_deploy -n ${MACHINE_ID} -f /etc/cortx/solution -c yaml:///etc/cortx/cluster.conf;
