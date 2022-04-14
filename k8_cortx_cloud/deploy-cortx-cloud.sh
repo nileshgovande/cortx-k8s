@@ -963,9 +963,17 @@ function waitForAllDeploymentsAvailable()
 
     # Initial wait
     FAIL=0
-    if ! kubectl wait --for=condition=available --timeout="${TIMEOUT}" "$@"; then
+    #if ! kubectl wait --for=condition=available --timeout="${TIMEOUT}" "$@"; then
+    #    # Secondary wait
+    #    if ! kubectl wait --for=condition=available --timeout="${TIMEOUT}" "$@"; then
+    #        # Still timed out.  This is a failure
+    #        FAIL=1
+    #    fi
+    #fi
+
+    if ! kubectl rollout status --watch --timeout="${TIMEOUT}" "$@"; then
         # Secondary wait
-        if ! kubectl wait --for=condition=available --timeout="${TIMEOUT}" "$@"; then
+        if ! kubectl rollout status --watch --timeout="${TIMEOUT}" "$@"; then
             # Still timed out.  This is a failure
             FAIL=1
         fi
@@ -1151,6 +1159,9 @@ function deployCortxServer()
     # Wait for all cortx-data deployments to be ready
     local deployments=("statefulset/cortx-server")
 
+    ### TODO CORTX-28968 This needs to be updated, since wait does not work for sts
+    ### `kubectl rollout status` is an alternative
+
     if ! waitForAllDeploymentsAvailable 300s "CORTX Server" "${deployments[@]}"; then
         echo "Failed.  Exiting script."
         exit 1
@@ -1277,7 +1288,9 @@ function cleanup()
     #################################################################
     find "$(pwd)/cortx-cloud-helm-pkg/cortx-control" -name "secret-*" -delete
     find "$(pwd)/cortx-cloud-helm-pkg/cortx-data" -name "secret-*" -delete
+    ### DEPRECATED - Will be removed in a future release
     find "$(pwd)/cortx-cloud-helm-pkg/cortx-server" -name "secret-*" -delete
+    ### END DEPRECATED
     find "$(pwd)/cortx-cloud-helm-pkg/cortx-ha" -name "secret-*" -delete
     find "$(pwd)/cortx-cloud-helm-pkg/cortx-client" -name "secret-*" -delete
 
