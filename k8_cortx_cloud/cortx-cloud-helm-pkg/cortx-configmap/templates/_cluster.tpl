@@ -1,12 +1,13 @@
+### TODO CORTX-28968 Revisit UUID defaults here since we are moving away from UUID entirely...
 {{- define "storageset.node" -}}
 - name: {{ .name }}
   {{- if eq .type "server_node" }}
-  ### TODO CORTX-28968 Revisit defaults here since we are moving away from UUID entirely...
   id: {{ default uuidv4 .id | quote }}
+  hostname: {{ .hostname }}
   {{- else }}
   id: {{ default uuidv4 .id | replace "-" "" | quote }}
-  {{- end }}
   hostname: {{ .name }}
+  {{- end }}
   type: {{ .type }}
 {{- end -}}
 
@@ -78,7 +79,7 @@ cluster:
     {{- $shortHost := (split "." $key)._0 -}}
     {{- if and $.Values.cortxRgw.enabled $val.serverUuid }}
     {{- $serverName := printf "%s.cortx-server.default.svc.cluster.local" $key -}}
-    {{- include "storageset.node" (dict "name" $serverName "id" $val.serverUuid "type" "server_node") | nindent 4 }}
+    {{- include "storageset.node" (dict "name" $serverName "hostname" $key "id" $val.serverUuid "type" "server_node") | nindent 4 }}
     {{- end }}
     {{- if $val.dataUuid }}
     {{- $dataName := printf "cortx-data-headless-svc-%s" $shortHost -}}

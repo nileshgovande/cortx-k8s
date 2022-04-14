@@ -41,6 +41,8 @@ spec:
         cortx.io/service-domain: "{{ .Values.cortxserver.service.headless.name }}.{{ .Release.Namespace }}.svc.{{ .Values.clusterdomain }}"
     spec:
       subdomain: {{ .Values.cortxserver.service.headless.name }}
+      ### Avoid using below if possible due to limitations around Linux kernel field length limitations
+      ### See https://kubernetes.io/docs/concepts/services-networking/dns-pod-service/#pod-sethostnameasfqdn-field
       setHostnameAsFQDN: true
       serviceAccountName: {{ .Values.cortxserver.serviceaccountname }}
       volumes:
