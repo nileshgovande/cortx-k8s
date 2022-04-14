@@ -770,7 +770,10 @@ function deployCortxConfigMap()
         # StatefulSets create pod names of "{statefulset-name}-{index}", with index starting at 0
         local pod_name="${cortxserver_server_pod_prefix}-${count}"
         local pod_fqdn="${pod_name}.${cortxserver_service_headless_name}.${namespace}.svc.${cluster_domain}"
-        local md5hash=$(echo -n "${pod_name}" | md5sum | awk '{print $1}')
+        # Use below when hostname of pod is only short name
+        #local md5hash=$(echo -n "${pod_name}" | md5sum | awk '{print $1}')
+        # Use below when hostname of pod is fqdn
+        local md5hash=$(echo -n "${pod_fqdn}" | md5sum | awk '{print $1}')
         helm_install_args+=(
             ### TODO CORTX-28968 Does ${pod_name} below need to be ${pod_fqdn} for the Helm chart instead?
             ### Reviewing internals of cortx-configmap Helm Chart would say "no".
