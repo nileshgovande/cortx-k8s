@@ -985,14 +985,7 @@ function waitForAllDeploymentsAvailable()
 
     # Initial wait
     FAIL=0
-    #if ! kubectl wait --for=condition=available --timeout="${TIMEOUT}" "$@"; then
-    #    # Secondary wait
-    #    if ! kubectl wait --for=condition=available --timeout="${TIMEOUT}" "$@"; then
-    #        # Still timed out.  This is a failure
-    #        FAIL=1
-    #    fi
-    #fi
-
+    ### CORTX-28968 - moved from `kubectl wait` to `kubectl rollout status` in support of StatefulSets
     if ! kubectl rollout status --watch --timeout="${TIMEOUT}" "$@"; then
         # Secondary wait
         if ! kubectl rollout status --watch --timeout="${TIMEOUT}" "$@"; then
