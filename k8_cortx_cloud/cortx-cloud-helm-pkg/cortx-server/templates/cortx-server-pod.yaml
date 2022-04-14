@@ -41,7 +41,7 @@ spec:
         cortx.io/service-domain: "{{ .Values.cortxserver.service.headless.name }}.{{ .Release.Namespace }}.svc.{{ .Values.clusterdomain }}"
     spec:
       subdomain: {{ .Values.cortxserver.service.headless.name }}
-      #setHostnameAsFQDN: true
+      setHostnameAsFQDN: true
       serviceAccountName: {{ .Values.cortxserver.serviceaccountname }}
       volumes:
         - name: {{ .Values.cortxserver.cfgmap.volmountname }}

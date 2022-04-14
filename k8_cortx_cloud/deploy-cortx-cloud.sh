@@ -17,12 +17,6 @@ cortx_secret_fields=("kafka_admin_secret"
                      "csm_mgmt_admin_secret")
 readonly cortx_secret_fields
 
-### TODO CORTX-28968 Define or extract Headless Service names for components?
-cortxserver_service_headless_name="cortx-server"
-readonly cortxserver_service_headless_name
-
-global_cortx_secret_name=""
-
 function parseSolution()
 {
     ./parse_scripts/parse_yaml.sh "${solution_yaml}" "$1"
@@ -112,7 +106,10 @@ function configurationCheck()
     done <<< "$(./solution_validation_scripts/solution-validation.sh "${solution_yaml}")"
 }
 
-# Initial solution.yaml / system state checks
+##########################################################
+# Begin initial solution.yaml & system state checks
+##########################################################
+
 configurationCheck
 
 max_consul_inst=3
@@ -252,17 +249,6 @@ do
     count=$((count+1))
 done
 
-### TODO CORTX-28968 Evaluate if this is okay for global scope variables
-server_instances_per_node="$(getSolutionValue 'solution.common.s3.instances_per_node')"
-data_node_count=${#node_name_list[@]}
-total_server_pods=$(( data_node_count * server_instances_per_node ))
-
-echo ""
-echo "###########################################################################"
-echo "Total Server Pods: ${total_server_pods}"
-echo "###########################################################################"
-echo ""
-
 # Copy cluster node info file from CORTX local block helm to CORTX data
 cp "${cortx_blk_data_node_list_info_path}" "$(pwd)/cortx-cloud-helm-pkg/cortx-data"
 
@@ -291,6 +277,40 @@ done
 
 # Copy device info file from CORTX local block helm to CORTX data
 cp "${cortx_blk_data_mnt_info_path}" "$(pwd)/cortx-cloud-helm-pkg/cortx-data"
+
+##########################################################
+# Extract & establish required cluster-wide constants
+### TODO Define these elements as reasonable defaults in eventual values.yaml
+##########################################################
+
+global_cortx_secret_name=""
+
+cortxserver_service_headless_name="cortx-server"
+readonly cortxserver_service_headless_name
+
+cortxserver_server_pod_prefix="cortx-server"
+readonly cortxserver_server_pod_prefix
+
+cluster_domain="cluster.local"
+readonly cluster_domain
+
+server_instances_per_node="$(getSolutionValue 'solution.common.s3.instances_per_node')"
+data_node_count=${#node_name_list[@]}
+total_server_pods=$(( data_node_count * server_instances_per_node ))
+
+readonly server_instances_per_node
+readonly data_node_count
+readonly total_server_pods
+
+echo ""
+echo "###########################################################################"
+echo "Total Server Pods: ${total_server_pods}"
+echo "###########################################################################"
+echo ""
+
+##########################################################
+# Begin CORTX on k8s deployment
+##########################################################
 
 # Create CORTX namespace
 if [[ "${namespace}" != "default" ]]; then
@@ -679,6 +699,7 @@ function generateMachineIds()
     done
 }
 
+### TODO Much of this overall function should evolve to live inside Helm charts
 function deployCortxConfigMap()
 {
     printf "########################################################\n"
@@ -743,20 +764,11 @@ function deployCortxConfigMap()
     storage_set_dur_sns=$(parseSolution 'solution.common.storage_sets.durability.sns' | cut -f2 -d'>' || true)
     storage_set_dur_dix=$(parseSolution 'solution.common.storage_sets.durability.dix' | cut -f2 -d'>' || true)
 
-    ### TODO CORTX-28968 Document scope and context of server pod calculations
-    ### TODO CORTX-28968 Much of this overall function should evolve to live inside Helm charts
-    #local server_instances_per_node="$(getSolutionValue 'solution.common.s3.instances_per_node')"
     local count=0
-    # StatefulSets create pod names of "{statefulset-name}-{index}", with index starting at 0
-    local server_pod_prefix="cortx-server"
-    #local data_node_count=${#node_name_list[@]}
-    #local total_server_pods=$(( data_node_count * server_instances_per_node ))
-    ### TODO CORTX-28968 Create solution.yaml default values, as live kubectl lookup is sketchy (bitnami charts provide cluster.local as default)
-    local cluster_domain="cluster.local"
-
     for (( count=0; count<${total_server_pods}; count++ )); do
         # Build out FQDN of server pods 
-        local pod_name="${server_pod_prefix}-${count}"
+        # StatefulSets create pod names of "{statefulset-name}-{index}", with index starting at 0
+        local pod_name="${cortxserver_server_pod_prefix}-${count}"
         local pod_fqdn="${pod_name}.${cortxserver_service_headless_name}.${namespace}.svc.${cluster_domain}"
         local md5hash=$(echo -n "${pod_name}" | md5sum | awk '{print $1}')
         helm_install_args+=(
@@ -768,7 +780,6 @@ function deployCortxConfigMap()
             --set "cortxHare.haxServerEndpoints[${count}]=tcp://${pod_fqdn}:22001"
         )
     done
-    ### END CORTX-28968
 
     if ((num_motr_client > 0)); then
         helm_install_args+=(
@@ -1052,7 +1063,7 @@ function deployCortxControl()
         "${optional_values[@]}" \
         --namespace "${namespace}"
 
-    printf "\nWait for CORTX Control to be ready"
+    printf "\nWait for CORTX Control to be ready\n"
     if ! waitForAllDeploymentsAvailable 300s "CORTX Control" deployment/cortx-control; then
         echo "Failed.  Exiting script."
         exit 1
@@ -1105,7 +1116,7 @@ function deployCortxData()
 
     # Wait for all cortx-data deployments to be ready
     ### TODO CORTX-28968 Remove this dev-phase shortcut
-    #printf "\nWait for CORTX Data to be ready"
+    #printf "\nWait for CORTX Data to be ready\n"
     #local deployments=()
     #for i in "${!node_selector_list[@]}"; do
     #    deployments+=("deployment/cortx-data-${node_name_list[i]}")
@@ -1166,14 +1177,13 @@ function deployCortxServer()
         --set cortxserver.serviceaccountname="${serviceAccountName}" \
         --namespace "${namespace}"
 
-    printf "\nWait for CORTX Server to be ready"
+    printf "\nWait for CORTX Server to be ready\n"
     # Wait for all cortx-data deployments to be ready
-    local deployments=("statefulset/cortx-server")
 
     ### TODO CORTX-28968 This needs to be updated, since wait does not work for sts
     ### `kubectl rollout status` is an alternative
 
-    if ! waitForAllDeploymentsAvailable 300s "CORTX Server" "${deployments[@]}"; then
+    if ! waitForAllDeploymentsAvailable 300s "CORTX Server" "statefulset/cortx-server"; then
         echo "Failed.  Exiting script."
         exit 1
     fi
@@ -1219,7 +1229,7 @@ function deployCortxHa()
         --set namespace="${namespace}" \
         -n "${namespace}"
 
-    printf "\nWait for CORTX HA to be ready"
+    printf "\nWait for CORTX HA to be ready\n"
     if ! waitForAllDeploymentsAvailable 120s "CORTX HA" deployment/cortx-ha; then
         echo "Failed.  Exiting script."
         exit 1
@@ -1265,7 +1275,7 @@ function deployCortxClient()
             -n "${namespace}"
     done
 
-    printf "\nWait for CORTX Client to be ready"
+    printf "\nWait for CORTX Client to be ready\n"
     while true; do
         count=0
         while IFS= read -r line; do
