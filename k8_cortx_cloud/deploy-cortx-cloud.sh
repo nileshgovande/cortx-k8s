@@ -252,6 +252,17 @@ do
     count=$((count+1))
 done
 
+### TODO CORTX-28968 Evaluate if this is okay for global scope variables
+server_instances_per_node="$(getSolutionValue 'solution.common.s3.instances_per_node')"
+data_node_count=${#node_name_list[@]}
+total_server_pods=$(( data_node_count * server_instances_per_node ))
+
+echo ""
+echo "###########################################################################"
+echo "Total Server Pods: ${total_server_pods}"
+echo "###########################################################################"
+echo ""
+
 # Copy cluster node info file from CORTX local block helm to CORTX data
 cp "${cortx_blk_data_node_list_info_path}" "$(pwd)/cortx-cloud-helm-pkg/cortx-data"
 
@@ -734,12 +745,12 @@ function deployCortxConfigMap()
 
     ### TODO CORTX-28968 Document scope and context of server pod calculations
     ### TODO CORTX-28968 Much of this overall function should evolve to live inside Helm charts
-    local server_instances_per_node="$(getSolutionValue 'solution.common.s3.instances_per_node')"
+    #local server_instances_per_node="$(getSolutionValue 'solution.common.s3.instances_per_node')"
     local count=0
     # StatefulSets create pod names of "{statefulset-name}-{index}", with index starting at 0
     local server_pod_prefix="cortx-server"
-    local data_node_count=${#node_name_list[@]}
-    local total_server_pods=$(( data_node_count * server_instances_per_node ))
+    #local data_node_count=${#node_name_list[@]}
+    #local total_server_pods=$(( data_node_count * server_instances_per_node ))
     ### TODO CORTX-28968 Create solution.yaml default values, as live kubectl lookup is sketchy (bitnami charts provide cluster.local as default)
     local cluster_domain="cluster.local"
 
@@ -1130,9 +1141,9 @@ function deployCortxServer()
 
     ### TODO CORTX-28968 Document scope and context of server pod calculations
     ### TODO CORTX-28968 Can this be a global?
-    local server_instances_per_node="$(getSolutionValue 'solution.common.s3.instances_per_node')"
-    local data_node_count=${#node_name_list[@]}
-    local total_server_pods=$(( data_node_count * server_instances_per_node ))
+    #local server_instances_per_node="$(getSolutionValue 'solution.common.s3.instances_per_node')"
+    #local data_node_count=${#node_name_list[@]}
+    #local total_server_pods=$(( data_node_count * server_instances_per_node ))
 
     helm install "cortx-server-${namespace}" cortx-cloud-helm-pkg/cortx-server \
         --set cortxserver.image="${cortxserver_image}" \
